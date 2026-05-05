@@ -1,63 +1,105 @@
 <!DOCTYPE html>
 <html>
-    <head>
-        <meta charset="utf-8">
-        <title>⚡ Olympian Helpers</title>
-        <style>
-            body {
-                font-family:"comic sans MS", sans-serif;
-                background-image:url(https://upload.wikimedia.org/wikipedia/commons/a/a4/Parthenon_%2830276156187%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=index&utm_content=original);
-                background-size:cover;
-                color:white;
-            }
-            
-            .importiant {
-                font-weight:bold;
-            }
-            
-            .popup {
-                text-decoration:underline;
-            }
-        </style>
-    </head>
-    <body>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>⚡ Olympian Helpers</title>
+    <style>
+        body {
+            font-family: "Comic Sans MS", "Comic Sans", cursive;
+            background-image: url('https://upload.wikimedia.org/wikipedia/commons/a/a4/Parthenon_%2830276156187%29.jpg');
+            background-size: cover;
+            background-attachment: fixed;
+            background-position: center;
+            color: white;
+            margin: 0;
+            padding: 20px;
+        }
+
+        /* Semi-transparent overlay to make text pop for your classmates */
+        .content-container {
+            background-color: rgba(0, 0, 0, 0.6);
+            padding: 30px;
+            border-radius: 15px;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        .important {
+            font-weight: bold;
+            color: #ffd700; /* Gold color for Greek theme */
+        }
+
+        .popup {
+            text-decoration: underline;
+            cursor: help;
+        }
+
+        h1 {
+            text-align: center;
+            font-size: 3em;
+            text-shadow: 2px 2px 4px #000;
+        }
+
+        h2 {
+            border-bottom: 2px solid #ffd700;
+            display: inline-block;
+        }
+    </style>
+</head>
+<body>
+
+<div class="content-container">
     <h1>Olympian Helpers</h1>
+
     <h2>Main Idea</h2>
-    <p><strong>Olympian Helpers</strong> is a book series written by Oz Lavenski. In the story, the two main characters, Nicholas Brown and his half-brother, Francis Gorsky,  do work for the <span id="popup1" class="importiant popup">Olympian</span> gods. This includes anything from finding a treasure to stopping a war.</p>
+    <p><strong>Olympian Helpers</strong> is a book series written by Oz Lavenski. In the story, the two main characters, Nicholas Brown and his half-brother, Francis Gorsky, do work for the <span id="popup1" class="important popup">Olympian</span> gods. This includes anything from finding a treasure to stopping a war.</p>
+
     <h2>Characters</h2>
-    <p><strong>Nick Brown and Francis Gorsky</strong> are the main characters (or MCs) in the story. They are the two <span class="importiant popup" id="popup2">protagonists</span> in the story. Nick is the younger kid, but he's smarter, quicker on his feet, and also the main main character. The story is writen in his <span class="importiant popup" id="popup3">POV</span>.</p>
+    <p><strong>Nick Brown and Francis Gorsky</strong> are the main characters (or MCs) in the story. They are the two <span class="important popup" id="popup2">protagonists</span> in the story. Nick is the younger kid, but he's smarter, quicker on his feet, and also the main main character. The story is written in his <span class="important popup" id="popup3">POV</span>.</p>
+
     <h2>Books</h2>
-    <p><strong>There are 2 books</strong> in the series right now. A third one is in the making. Each one follows a similar <span class="importiant popup" id="popup4">plot</span>, where the kids are having their normal life, one of the gods shows up, reports something that happened, and then tells them to fix it.</p>
+    <p><strong>There are 2 books</strong> in the series right now. A third one is in the making. Each one follows a similar <span class="important popup" id="popup4">plot</span>, where the kids are having their normal life, one of the gods shows up, reports something that happened, and then tells them to fix it.</p>
+
     <h2>Author</h2>
-    <p><strong>Oz Lavenski</strong>, as you can guess, loves Greek mythology. He's read every book he could get his hands on (for kids, of course). He was inspired the most by <span class="importiant">George O Connor</span>. That's where he got the myth about <span class="importiant">Hermes and the dogs</span> and <span class="importiant">Apollo and Asclepius</span>.</p>
-    <script>
-        popEl1 = document.getElementById("popup1")
-        popEl2 = document.getElementById("popup2")
-        popEl3 = document.getElementById("popup3")
-        popEl4 = document.getElementById("popup4")
-        mouseOver = function(el, txt1, txt2){
-            var name = document.getElementById(el)
-            name.textContent = txt1
-            window.setTimeout(function(){
-                reset(el, txt2)
-            }, 5000)
-        }
-        reset = function(el, txt){
-            var name = document.getElementById(el)
-            name.textContent = txt
-        }
-        popEl1.addEventListener("mousemove", function(){
-            mouseOver("popup1", "Greek", "Olympian")
-        })
-        popEl2.addEventListener("mousemove", function(){
-            mouseOver("popup2", "good guys", "protagonists")
-        })
-        popEl3.addEventListener("mousemove", function(){
-            mouseOver("popup3", "Point Of Veiw", "POV")
-        })
-        popEl4.addEventListener("mousemove", function(){
-            mouseOver("popup4", "story structure", "plot")
-        })
-    </script>
-    </body>
+    <p><strong>Oz Lavenski</strong>, as you can guess, loves Greek mythology. He's read every book he could get his hands on (for kids, of course). He was inspired the most by <span class="important">George O'Connor</span>. That's where he got the myth about <span class="important">Hermes and the dogs</span> and <span class="important">Apollo and Asclepius</span>.</p>
+</div>
+
+<script>
+    // Variables for your elements
+    const popEl1 = document.getElementById("popup1");
+    const popEl2 = document.getElementById("popup2");
+    const popEl3 = document.getElementById("popup3");
+    const popEl4 = document.getElementById("popup4");
+
+    // The function that changes the text
+    const mouseOver = function(elId, txt1, txt2) {
+        const element = document.getElementById(elId);
+        element.textContent = txt1;
+        
+        // Change it back after 5 seconds
+        window.setTimeout(function() {
+            element.textContent = txt2;
+        }, 5000);
+    };
+
+    // Event listeners for the hovers
+    popEl1.addEventListener("mousemove", function() {
+        mouseOver("popup1", "Greek", "Olympian");
+    });
+    
+    popEl2.addEventListener("mousemove", function() {
+        mouseOver("popup2", "good guys", "protagonists");
+    });
+    
+    popEl3.addEventListener("mousemove", function() {
+        mouseOver("popup3", "Point Of View", "POV");
+    });
+    
+    popEl4.addEventListener("mousemove", function() {
+        mouseOver("popup4", "story structure", "plot");
+    });
+</script>
+
+</body>
 </html>

@@ -45,6 +45,14 @@
             border-bottom: 2px solid #ffd700;
             display: inline-block;
         }
+        
+        #submit-btn {
+            color:white;
+            background-color:blue;
+            border:2px solid blue;
+            border-radius:8px;
+            cursor: pointer;
+        }
     </style>
 </head>
 <body>
@@ -68,6 +76,11 @@
     
     <h2>Author</h2>
     <p><strong>Oz Lavenski</strong>, as you can guess, loves Greek mythology. He's read every book he could get his hands on (for kids, of course). He was inspired the most by <span class="important">George O'Connor</span>. That's where he got the myth about <span class="important">Hermes and the dogs</span> and <span class="important">Apollo and Asclepius</span>.</p>
+    <h2>Presentation</h2>
+    <p><strong>The Canva</strong> Olympian Helpers presentation is out now! Check it out by entering your learn.vsb.bc.ca adress into the place below and clicking the "submit" button.</p>
+    <input id="email-input" placeholder="email@learn.vsb.bc.ca">
+    <button id="submit-btn">submit</button>
+    <div id="status-message" style="margin-top: 10px; font-weight: bold;"></div>
 </div>
 
 <script>
@@ -103,6 +116,33 @@
     
     popEl4.addEventListener("mousemove", function() {
         mouseOver("popup4", "story structure", "plot");
+    });
+
+    // Email Submission Logic
+    const submitBtn = document.getElementById("submit-btn");
+    const emailInput = document.getElementById("email-input");
+    const statusMessage = document.getElementById("status-message");
+
+    submitBtn.addEventListener("click", function() {
+        const address = emailInput.value.trim();
+        const myEmail = "ozlavenski@gmail.com"; // Change this to your actual email!
+
+        if (address === "") {
+            statusMessage.style.color = "orange";
+            statusMessage.textContent = "Please enter an email address.";
+        } else if (!address.includes("@learn.vsb.bc.ca")) {
+            statusMessage.style.color = "red";
+            statusMessage.textContent = "Please use your school email address!";
+        } else {
+            statusMessage.style.color = "lime";
+            statusMessage.textContent = "Opening email app... It worked!";
+
+            const subject = encodeURIComponent("Request for Presentation Access");
+            const body = encodeURIComponent("Hi Oz, I would like to see the Canva presentation. My email is: " + address);
+            
+            // This triggers the email app to open
+            window.location.href = "mailto:" + myEmail + "?subject=" + subject + "&body=" + body;
+        }
     });
 </script>
 

@@ -65,19 +65,23 @@
             position: absolute;
             left: 10px;
             top: 100px;
-            width: 120px;
+            width: 130px;
             background: rgba(0, 0, 0, 0.8);
             border-radius: 8px;
             padding: 15px;
             border: 1px solid #555;
             text-align: center;
             z-index: 5;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
         }
 
         .sidebar-title {
-            font-size: 12px;
-            margin-bottom: 15px;
+            font-size: 11px;
             color: #ddd;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
         }
 
         #draggable-city {
@@ -93,7 +97,24 @@
             font-size: 10px;
             font-weight: bold;
             box-shadow: 0 4px 8px rgba(0,0,0,0.5);
+            transition: transform 0.1s;
         }
+
+        #draggable-city:active { transform: scale(0.95); }
+
+        .nav-btn {
+            background: #444;
+            border: 1px solid #666;
+            color: #fff;
+            padding: 6px;
+            border-radius: 4px;
+            font-size: 11px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .nav-btn:hover { background: #555; }
+        .nav-btn.rival { border-color: #f1c40f; color: #f1c40f; }
 
         /* Overlays */
         .overlay {
@@ -157,12 +178,11 @@
             pointer-events: none;
             color: #eee;
             border: 1px solid #444;
-            transition: background 0.3s;
         }
 
         .log-entry { margin-bottom: 4px; border-left: 3px solid #666; padding-left: 5px; }
         .log-warn { border-left-color: #ff4444; color: #ffbbbb; font-weight: bold; }
-        .log-trade { border-left-color: #4a90e2; color: #bbddff; font-weight: bold; }
+        .log-trade { border-left-color: #f1c40f; color: #f1c40f; font-weight: bold; }
 
         .vehicle-grid {
             display: grid;
@@ -170,29 +190,12 @@
             gap: 5px;
             margin-top: 10px;
         }
-
-        /* Mini-modal for rejections */
-        #rejection-notice {
-            position: fixed;
-            top: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: #ff4444;
-            color: white;
-            padding: 10px 20px;
-            border-radius: 20px;
-            font-weight: bold;
-            display: none;
-            z-index: 300;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.5);
-        }
     </style>
 </head>
 <body>
 
 <div id="game-container">
     <canvas id="gameCanvas"></canvas>
-    <div id="rejection-notice">Offer Rejected!</div>
 
     <div id="hud">
         <div class="stat-item">
@@ -218,19 +221,22 @@
     </div>
 
     <div id="sidebar">
-        <div class="sidebar-title">CREATE A CITY</div>
-        <div id="draggable-city" draggable="true">DRAG</div>
+        <div class="sidebar-title">Construction</div>
+        <div id="draggable-city" draggable="true">CITY</div>
+        <hr style="width:100%; border:0; border-top:1px solid #444;">
+        <div class="sidebar-title">Navigation</div>
+        <button class="nav-btn" onclick="focusOnNation('player')">Go to Nation</button>
+        <button class="nav-btn rival" onclick="focusOnNation('rival')">Go to Rival</button>
     </div>
 
     <div id="cost-indicator">Cost: $0</div>
 
-    <!-- City Management -->
     <div id="city-overlay" class="overlay">
         <h2 id="overlay-title">City Management</h2>
         <p id="overlay-info"></p>
         
         <div id="player-actions">
-            <button id="btn-train-soldier" class="btn" onclick="buyUnit('soldier')">Train Soldier ($500 + 5 Zandite)</button>
+            <button id="btn-train-soldier" class="btn" onclick="buyUnit('soldier')">Train Soldier (1 Zandite)</button>
             <div class="vehicle-grid">
                 <button id="buy-car" class="btn" onclick="buyUnit('car')">Build Car</button>
                 <button id="buy-boat" class="btn" onclick="buyUnit('boat')">Build Boat</button>
@@ -245,15 +251,12 @@
         <button class="btn close-btn" onclick="closeOverlay()">Close</button>
     </div>
 
-    <!-- Rival Interaction -->
-    <div id="rival-ask-overlay" class="overlay">
-        <h2 id="ask-title">Yellow Nation Envoy</h2>
-        <p id="ask-text"></p>
-        <button id="btn-accept" class="btn trade-btn">Accept Offer</button>
-        <button id="btn-decline" class="btn close-btn">Decline</button>
+    <div id="interaction-overlay" class="overlay">
+        <h2 id="interaction-title">Incoming Transmission</h2>
+        <p id="interaction-message" style="margin-bottom: 15px; line-height: 1.4;"></p>
+        <div id="interaction-buttons"></div>
     </div>
 
-    <!-- Mine Management -->
     <div id="mine-overlay" class="overlay">
         <h2>Deep Mine</h2>
         <p>Mining is <b>FREE</b>!</p>
@@ -273,6 +276,10 @@
     const stageDisplay = document.getElementById('stage-display');
     const log = document.getElementById('log');
 
+    // CONFIGURATION
+    const RECOGNITION_TIME = 2 * 60 * 1000; 
+    const RIVAL_EXPANSION_CHANCE = 0.03;   
+
     let gameState = {
         money: 10000,
         zandite: 0,
@@ -280,12 +287,13 @@
         soldiers: 0,
         vehicles: { car: 0, boat: 0, plane: 0 },
         isDeveloping: true,
-        playerCities: [],
+        playerCities: [], 
         rivalCities: [],
-        rivalMoney: 10000,
-        rivalZandite: 15, // Started with a bit more to ensure early military
-        rivalSoldiers: 0,
-        rivalVehicles: { car: 0, boat: 0, plane: 0 },
+        // EQUALIZED: Rival now starts with same $10k as player
+        rivalMoney: 10000, 
+        rivalZandite: 20,
+        rivalSoldiers: 8,
+        rivalVehicles: { car: 3, boat: 0, plane: 1 },
         camera: { x: window.innerWidth / 2, y: window.innerHeight / 2 },
         hexSize: 40,
         isDragging: false,
@@ -293,7 +301,8 @@
         lastMousePos: { x: 0, y: 0 },
         selectedCity: null,
         mineCooldown: false,
-        borderConflictLastNotified: 0
+        globalRecognition: false, 
+        lastInteractionTime: Date.now()
     };
 
     const BASE_COSTS = { car: 800, boat: 1200, plane: 2500 };
@@ -310,16 +319,13 @@
     };
 
     function init() {
-        addLog("DEVELOPING STAGE: Drag the red hex to create your free first city.");
-        
-        let q = 3, r = 2;
-        while (!getTerrainAt(q, r).buildable) {
-            q++;
-        }
-        gameState.rivalCities.push({ q, r, terrain: getTerrainAt(q,r).name });
+        let q = 12, r = -6; 
+        while (!getTerrainAt(q, r).buildable) q++;
+        gameState.rivalCities.push({ q, r, terrain: getTerrainAt(q,r).name, createdAt: Date.now(), isRecognized: true });
 
         resize();
         window.addEventListener('resize', resize);
+        addLog("Nations balanced. Drag a city to begin your journey.", "log-trade");
         updateHUD();
         render();
         gameLoop();
@@ -328,13 +334,6 @@
     function resize() {
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
-    }
-
-    function showNotice(msg) {
-        const notice = document.getElementById('rejection-notice');
-        notice.innerText = msg;
-        notice.style.display = 'block';
-        setTimeout(() => notice.style.display = 'none', 3000);
     }
 
     function addLog(msg, type = '') {
@@ -367,22 +366,6 @@
         });
     }
 
-    function checkBorderConflict() {
-        let conflictFound = false;
-        for (const pCity of gameState.playerCities) {
-            if (isInsideRivalBorder(pCity.q, pCity.r)) conflictFound = true;
-            for (const n of HEX_NEIGHBORS) {
-                if (isInsideRivalBorder(pCity.q + n.q, pCity.r + n.r)) conflictFound = true;
-            }
-        }
-        const now = Date.now();
-        if (conflictFound && now - gameState.borderConflictLastNotified > 15000) {
-            addLog("TERRITORY ALERT: The Yellow Nation border is overlapping yours! They seem angry.", "log-warn");
-            gameState.borderConflictLastNotified = now;
-        }
-        return conflictFound;
-    }
-
     function hexToPixel(q, r) {
         const x = gameState.hexSize * (3/2 * q);
         const y = gameState.hexSize * (Math.sqrt(3)/2 * q + Math.sqrt(3) * r);
@@ -397,167 +380,175 @@
         return { q, r };
     }
 
+    function focusOnNation(type) {
+        const list = type === 'player' ? gameState.playerCities : gameState.rivalCities;
+        if (list.length === 0) return;
+        const target = list[Math.floor(Math.random()*list.length)];
+        const pixel = hexToPixel(target.q, target.r);
+        gameState.camera.x = (window.innerWidth / 2) - (pixel.x - gameState.camera.x);
+        gameState.camera.y = (window.innerHeight / 2) - (pixel.y - gameState.camera.y);
+    }
+
     function gameLoop() {
-        rivalAI();
-        gameState.money += gameState.playerCities.length * 1.5;
-        gameState.rivalMoney += gameState.rivalCities.length * 2.0; // AI grows slightly faster to be a threat
+        const now = Date.now();
+
+        if (!gameState.globalRecognition && gameState.playerCities.length > 0) {
+            const firstCity = gameState.playerCities[0];
+            if (now - firstCity.createdAt >= RECOGNITION_TIME) {
+                addLog("INTEL: The Yellow Nation has spotted you. Direct contact established.", "log-warn");
+                gameState.globalRecognition = true;
+            }
+        }
+
+        if (gameState.playerCities.length > 0) {
+            rivalAI();
+        }
+        
+        // ECONOMY EQUALIZED: Both earn 2.5 per city per tick
+        gameState.money += gameState.playerCities.length * 2.5;
+        gameState.rivalMoney += gameState.rivalCities.length * 2.5; 
         
         if (gameState.playerCities.length > 0 && Math.random() < 0.02) gameState.zandite++;
-        if (gameState.rivalCities.length > 0 && Math.random() < 0.03) gameState.rivalZandite++; // More Zandite for Rival
+        if (gameState.rivalCities.length > 0 && Math.random() < 0.04) gameState.rivalZandite++;
         
         updateHUD();
         setTimeout(gameLoop, 100);
     }
 
     function rivalAI() {
-        if (gameState.rivalCities.length === 0) {
-            let found = false;
-            let attempts = 0;
-            let q = 5, r = 5; 
-            if (gameState.playerCities.length > 0) {
-                const pBase = gameState.playerCities[0];
-                while (!found && attempts < 20) {
-                    const offsetQ = Math.floor(Math.random() * 10) - 5;
-                    const offsetR = Math.floor(Math.random() * 10) - 5;
-                    const tQ = pBase.q + offsetQ;
-                    const tR = pBase.r + offsetR;
-                    const terrain = getTerrainAt(tQ, tR);
-                    const occupied = gameState.playerCities.some(c=>c.q===tQ && c.r===tR);
-                    if (terrain.buildable && !occupied && !isInsidePlayerBorder(tQ, tR)) {
-                        q = tQ; r = tR; found = true;
-                    }
-                    attempts++;
-                }
-            }
-            gameState.rivalCities.push({ q, r, terrain: getTerrainAt(q, r).name });
-            gameState.rivalMoney = Math.max(gameState.rivalMoney, 5000);
-            gameState.rivalZandite = Math.max(gameState.rivalZandite, 10);
-            addLog("RE-EMERGENCE: The Yellow Nation has settled a new territory nearby!", "log-warn");
-        }
-
-        const hasConflict = checkBorderConflict();
-
-        // 1. Expansion
-        if (gameState.rivalMoney > 4000 && Math.random() < 0.01) { 
-            const city = gameState.rivalCities[Math.floor(Math.random() * gameState.rivalCities.length)];
+        if (Math.random() < RIVAL_EXPANSION_CHANCE) { 
+            const baseCity = gameState.rivalCities[Math.floor(Math.random() * gameState.rivalCities.length)];
             const offset = HEX_NEIGHBORS[Math.floor(Math.random()*6)];
-            const nQ = city.q + offset.q, nR = city.r + offset.r;
+            const nQ = baseCity.q + offset.q, nR = baseCity.r + offset.r;
+            
             const terrain = getTerrainAt(nQ, nR);
             const occupied = gameState.playerCities.some(c=>c.q===nQ&&c.r===nR) || gameState.rivalCities.some(c=>c.q===nQ&&c.r===nR);
-            const isPlayerTerritory = isInsidePlayerBorder(nQ, nR);
-            if (terrain.buildable && !occupied && !isPlayerTerritory && gameState.rivalMoney >= terrain.cost) {
-                gameState.rivalMoney -= terrain.cost;
-                gameState.rivalCities.push({ q: nQ, r: nR, terrain: terrain.name });
+            
+            if (terrain.buildable && !occupied && !isInsidePlayerBorder(nQ, nR)) {
+                if (gameState.rivalMoney >= terrain.cost) {
+                    gameState.rivalMoney -= terrain.cost;
+                    gameState.rivalCities.push({ 
+                        q: nQ, r: nR, terrain: terrain.name, createdAt: Date.now(), isRecognized: true 
+                    });
+                }
             }
         }
         
-        // 2. Military Build-up (Aggressive)
-        if (gameState.rivalMoney > 1000 && Math.random() < 0.05) {
-            if (gameState.rivalZandite >= 5) {
-                gameState.rivalMoney -= 500; gameState.rivalZandite -= 5; gameState.rivalSoldiers++;
-            } else if (gameState.rivalMoney > 3000) {
-                // Buy plane if rich
-                gameState.rivalMoney -= 2500; gameState.rivalVehicles.plane++;
-            } else {
-                gameState.rivalMoney -= 800; gameState.rivalVehicles.car++;
-            }
+        const timeSinceLast = Date.now() - gameState.lastInteractionTime;
+        if (gameState.globalRecognition && !gameState.isDeveloping && timeSinceLast > 45000 && Math.random() < 0.03) {
+            triggerRivalInteraction();
         }
 
-        // 3. Interactions
-        if (gameState.playerCities.length > 0) {
-            // Trade offer
-            if (!gameState.isDeveloping && gameState.rivalMoney > 9000 && Math.random() < 0.003) {
-                rivalInitiateTrade();
-            }
-
-            // ATTACK LOGIC (Much higher chance now)
-            let attackChance = 0.01; // 1% per tick normally
-            if (hasConflict) attackChance = 0.08; // 8% per tick if borders touch!
-
-            if (!gameState.isDeveloping && (gameState.rivalSoldiers + gameState.rivalVehicles.car + gameState.rivalVehicles.plane) > 2) {
-                if (Math.random() < attackChance) {
-                    const myPower = gameState.soldiers + (gameState.vehicles.car * 2) + (gameState.vehicles.plane * 5);
-                    const theirPower = gameState.rivalSoldiers + (gameState.rivalVehicles.car * 2) + (gameState.rivalVehicles.plane * 5);
-                    
-                    // Attack if they feel stronger OR if they are just aggressive (has conflict)
-                    if (theirPower >= myPower * 0.8 || (hasConflict && Math.random() < 0.5)) {
-                        rivalInitiateAttack(hasConflict);
-                    }
-                }
+        if (gameState.rivalMoney > 3000 && Math.random() < 0.1) {
+            if (gameState.rivalZandite >= 1) {
+                gameState.rivalMoney -= 500; gameState.rivalZandite -= 1; gameState.rivalSoldiers++;
+            } else if (gameState.rivalMoney > 6000) {
+                gameState.rivalMoney -= 2500; gameState.rivalVehicles.plane++;
             }
         }
     }
 
-    function rivalInitiateAttack(isBorderWar = false) {
-        if (gameState.playerCities.length === 0 || gameState.isDeveloping) return;
-        
-        const target = gameState.playerCities[Math.floor(Math.random() * gameState.playerCities.length)];
-        const msg = isBorderWar ? "BORDER WAR! Yellow Nation forces are storming your border!" : "The Yellow Nation has launched a full-scale assault!";
-        addLog(msg, "log-warn");
-        
-        const terrain = getTerrainAt(target.q, target.r);
-        
-        // Strength calculation
-        let pPower = (gameState.soldiers + (gameState.vehicles.car * 2) + (gameState.vehicles.plane * 5)) * terrain.defenseBonus;
-        let rPower = (gameState.rivalSoldiers + (gameState.rivalVehicles.car * 2) + (gameState.rivalVehicles.plane * 5));
-        
-        // Random variance (make them "mess up")
-        rPower *= (0.7 + Math.random() * 0.6); 
+    function triggerRivalInteraction() {
+        gameState.lastInteractionTime = Date.now();
+        const overlay = document.getElementById('interaction-overlay');
+        const msg = document.getElementById('interaction-message');
+        const buttons = document.getElementById('interaction-buttons');
+        buttons.innerHTML = '';
+        overlay.style.display = 'block';
 
-        if (rPower > pPower) {
-            addLog(`CRITICAL: They captured your city at (${target.q}, ${target.r})!`, "log-warn");
-            gameState.playerCities = gameState.playerCities.filter(c => c !== target);
-            gameState.rivalCities.push({ ...target, terrain: terrain.name });
+        if (Math.random() < 0.4) {
+            document.getElementById('interaction-title').innerText = "Yellow Nation: Aggression";
+            msg.innerText = "The Yellow Nation is testing your borders. Pay $3,000 tribute or defend your territory.";
             
-            // Winners keep some soldiers
-            gameState.rivalSoldiers = Math.floor(gameState.rivalSoldiers * 0.7);
-            gameState.soldiers = Math.floor(gameState.soldiers * 0.3);
+            const payBtn = document.createElement('button');
+            payBtn.className = "btn trade-btn";
+            payBtn.innerText = "Pay Tribute ($3,000)";
+            payBtn.onclick = () => {
+                if (gameState.money >= 3000) {
+                    gameState.money -= 3000;
+                    gameState.rivalMoney += 3000;
+                    addLog("Paid tribute. Conflict avoided.", "log-trade");
+                } else {
+                    addLog("Insufficient funds for tribute! Battle begins.", "log-warn");
+                    handleSkirmish();
+                }
+                overlay.style.display = 'none';
+            };
+
+            const resistBtn = document.createElement('button');
+            resistBtn.className = "btn attack-btn";
+            resistBtn.innerText = "Defend Borders";
+            resistBtn.onclick = () => {
+                handleSkirmish();
+                overlay.style.display = 'none';
+            };
+            buttons.appendChild(payBtn);
+            buttons.appendChild(resistBtn);
         } else {
-            addLog("DEFENSE SUCCESS: Your garrison repelled the Yellow Nation attack.", "log-trade");
-            // Losers lose more soldiers
-            gameState.rivalSoldiers = Math.floor(gameState.rivalSoldiers * 0.2);
-            gameState.soldiers = Math.floor(gameState.soldiers * 0.8);
+            document.getElementById('interaction-title').innerText = "Yellow Nation: Diplomatic Trade";
+            msg.innerText = "They offer $10,000 for one of your cities. Do you accept?";
+            
+            const acceptBtn = document.createElement('button');
+            acceptBtn.className = "btn trade-btn";
+            acceptBtn.innerText = "Sell City ($10,000)";
+            acceptBtn.onclick = () => {
+                if (gameState.playerCities.length > 1) {
+                    const city = gameState.playerCities.pop();
+                    gameState.money += 10000;
+                    gameState.rivalCities.push({...city, isRecognized: true});
+                    addLog("City sold to the Yellow Nation.", "log-trade");
+                } else {
+                    addLog("Denied: You must keep your capital city.");
+                }
+                overlay.style.display = 'none';
+            };
+
+            const declineBtn = document.createElement('button');
+            declineBtn.className = "btn close-btn";
+            declineBtn.innerText = "Decline";
+            declineBtn.onclick = () => {
+                addLog("Trade offer declined.");
+                overlay.style.display = 'none';
+            };
+            buttons.appendChild(acceptBtn);
+            buttons.appendChild(declineBtn);
+        }
+    }
+
+    function handleSkirmish() {
+        let pPower = gameState.soldiers + (gameState.vehicles.car * 2) + (gameState.vehicles.plane * 5);
+        let rPower = gameState.rivalSoldiers + (gameState.rivalVehicles.car * 1) + (gameState.rivalVehicles.plane * 3);
+        
+        if (pPower >= rPower) {
+            addLog("VICTORY! The Yellow Nation retreated and lost resources.", "log-trade");
+            gameState.soldiers = Math.max(0, gameState.soldiers - 1);
+            gameState.rivalSoldiers = Math.max(0, gameState.rivalSoldiers - 2);
+            gameState.rivalMoney = Math.max(0, gameState.rivalMoney - 1000);
+        } else {
+            addLog("DEFEAT! They looted $2,000 from your treasury.", "log-warn");
+            gameState.money = Math.max(0, gameState.money - 2000);
+            gameState.rivalMoney += 2000;
+            gameState.soldiers = Math.floor(gameState.soldiers * 0.4);
+            gameState.vehicles.car = Math.floor(gameState.vehicles.car * 0.5);
         }
         updateHUD();
     }
 
-    function rivalInitiateTrade() {
-        if (document.getElementById('rival-ask-overlay').style.display === 'block') return;
-        const cityToBuy = gameState.playerCities[Math.floor(Math.random() * gameState.playerCities.length)];
-        if (!cityToBuy) return;
-        const askOverlay = document.getElementById('rival-ask-overlay');
-        askOverlay.style.display = 'block';
-        document.getElementById('ask-text').innerText = `Yellow Nation merchants offer $6,000 for your settlement at (${cityToBuy.q}, ${cityToBuy.r}).`;
-        document.getElementById('btn-accept').onclick = () => {
-            gameState.money += 6000;
-            gameState.playerCities = gameState.playerCities.filter(c => c !== cityToBuy);
-            gameState.rivalCities.push({ ...cityToBuy, terrain: getTerrainAt(cityToBuy.q, cityToBuy.r).name });
-            addLog("City sold for $6,000.", 'log-trade');
-            askOverlay.style.display = 'none';
-        };
-        document.getElementById('btn-decline').onclick = () => { askOverlay.style.display = 'none'; };
-    }
-
-    function getVehicleCost(type) {
-        const discount = Math.min(0.5, gameState.buildingResourceCount * 0.05);
-        return Math.floor(BASE_COSTS[type] * (1 - discount));
-    }
-
     function buyUnit(type) {
         if (type === 'soldier') {
-            if (gameState.money >= 500 && gameState.zandite >= 5) {
-                gameState.money -= 500; gameState.zandite -= 5; gameState.soldiers++;
+            if (gameState.zandite >= 1) {
+                gameState.zandite -= 1; gameState.soldiers++;
                 if (gameState.isDeveloping) {
                     gameState.isDeveloping = false;
-                    addLog("DEVELOPING STAGE ENDED. You are now vulnerable to attacks!", "log-warn");
+                    addLog("PROGRESS: Nation status updated to ACTIVE.", "log-warn");
                 }
-            } else return addLog("Not enough money/Zandite.");
+            } else return addLog("Need Zandite for soldiers.");
         } else {
-            if (gameState.isDeveloping) return addLog("CANNOT BUILD VEHICLES: Still in Developing Stage.");
-            const cost = getVehicleCost(type);
+            if (gameState.isDeveloping) return addLog("Build a military first.");
+            const cost = Math.floor(BASE_COSTS[type] * (1 - Math.min(0.5, gameState.buildingResourceCount * 0.05)));
             if (gameState.money >= cost) {
                 gameState.money -= cost; gameState.vehicles[type]++;
-            } else return addLog("Insufficient funds.");
+            } else return addLog("Not enough money.");
         }
         updateHUD();
         closeOverlay();
@@ -566,25 +557,14 @@
     function updateHUD() {
         moneyDisplay.innerText = `$${Math.floor(gameState.money).toLocaleString()}`;
         zanditeDisplay.innerText = gameState.zandite;
-        const discountPercent = Math.min(50, gameState.buildingResourceCount * 5);
-        ironDisplay.innerText = `${discountPercent}%`;
+        ironDisplay.innerText = `${Math.min(50, gameState.buildingResourceCount * 5)}%`;
         const totalV = gameState.vehicles.car + gameState.vehicles.boat + gameState.vehicles.plane;
         document.getElementById('military-display').innerText = `S:${gameState.soldiers} | V:${totalV}`;
-        if (gameState.money < 1000) {
-            stageDisplay.innerText = "Broke";
-            stageDisplay.style.color = "#ff4444";
-        } else if (gameState.isDeveloping) {
-            stageDisplay.innerText = "Developing";
-            stageDisplay.style.color = "#4a90e2";
+        
+        if (gameState.isDeveloping) {
+            stageDisplay.innerText = "Developing"; stageDisplay.style.color = "#4a90e2";
         } else {
-            stageDisplay.innerText = "Active";
-            stageDisplay.style.color = "#0f0";
-        }
-        if (document.getElementById('city-overlay').style.display === 'block') {
-            const isDev = gameState.isDeveloping;
-            document.getElementById('buy-car').innerHTML = `Build Car<br>${isDev ? 'Locked' : '$'+getVehicleCost('car')}`;
-            document.getElementById('buy-boat').innerHTML = `Build Boat<br>${isDev ? 'Locked' : '$'+getVehicleCost('boat')}`;
-            document.getElementById('buy-plane').innerHTML = `Build Plane<br>${isDev ? 'Locked' : '$'+getVehicleCost('plane')}`;
+            stageDisplay.innerText = "Active"; stageDisplay.style.color = "#0f0";
         }
     }
 
@@ -593,91 +573,64 @@
         gameState.mineCooldown = true;
         const btn = document.getElementById('mine-btn-primary');
         btn.disabled = true;
-        let secondsLeft = 2;
+        let sec = 2;
         const timer = setInterval(() => {
-            secondsLeft--;
-            if (secondsLeft > 0) btn.innerText = `Recharging (${secondsLeft}s)...`;
+            sec--;
+            if (sec > 0) btn.innerText = `Recharging (${sec}s)...`;
             else {
-                clearInterval(timer);
-                gameState.mineCooldown = false;
-                btn.disabled = false;
-                btn.innerText = "Mine for Ores (FREE)";
+                clearInterval(timer); gameState.mineCooldown = false;
+                btn.disabled = false; btn.innerText = "Mine for Ores (FREE)";
             }
         }, 1000);
         const r = Math.random();
-        if (r < 0.1) { gameState.zandite += 2; addLog("Found Zandite!"); } 
-        else if (r < 0.25) { gameState.money += 2000; addLog("GOLD! +$2,000", "log-trade"); } 
-        else if (r < 0.5) { 
-            const isCopper = Math.random() < 0.5;
-            const oreName = isCopper ? "Copper" : "Iron";
-            if (gameState.isDeveloping) { gameState.money += 100; addLog(`Found ${oreName}! Developing Stage Bonus: +$100`, "log-trade"); } 
-            else { gameState.buildingResourceCount++; addLog(`${oreName} found! Vehicle costs down.`); }
-        } else { gameState.money += 200; addLog("Found basic minerals."); }
+        if (r < 0.1) { gameState.zandite += 2; addLog("Mined 2 Zandite!"); } 
+        else if (r < 0.5) { gameState.buildingResourceCount++; addLog("Found Building Materials!"); }
+        else { gameState.money += 200; addLog("Mined Gold ($200)"); }
         updateHUD();
     }
 
     function attemptTrade() {
-        if (gameState.money < 1000) return addLog("BROKE STAGE: Cannot trade.");
-        if (gameState.money < 5000) return addLog("Insufficient funds for trade.");
+        if (Math.random() < 0.3) {
+            addLog("The Yellow Nation politely declines your offer. Their territory is not for sale today.", "log-warn");
+            closeOverlay();
+            return;
+        }
 
-        const rivalCitiesCount = gameState.rivalCities.length;
-        const playerCitiesCount = gameState.playerCities.length;
+        if (gameState.money < 5000) return addLog("Need $5,000 for diplomatic purchase.");
+        if (gameState.rivalCities.length <= 1) return addLog("They refuse to sell their capital.");
         
-        if (rivalCitiesCount <= 1) {
-            showNotice("Rival: 'This is our only home! We won't sell!'");
-            addLog("The Yellow Nation refused to sell their only territory.", "log-warn");
-            return;
-        }
-
-        let baseRefusalChance = 0.3; 
-        if (rivalCitiesCount > playerCitiesCount) baseRefusalChance = 0.7; 
-
-        if (Math.random() < baseRefusalChance) {
-            const excuses = [
-                "We need more money than that!",
-                "Our people refuse to leave.",
-                "This land is sacred to us.",
-                "Not today, merchant!"
-            ];
-            showNotice("Rival: '" + excuses[Math.floor(Math.random()*excuses.length)] + "'");
-            addLog("Trade negotiation failed.", "log-warn");
-            return;
-        }
-
         gameState.money -= 5000;
+        gameState.rivalMoney += 5000;
         gameState.rivalCities = gameState.rivalCities.filter(c => c !== gameState.selectedCity);
-        gameState.playerCities.push({ ...gameState.selectedCity, terrain: getTerrainAt(gameState.selectedCity.q, gameState.selectedCity.r).name });
-        addLog("You purchased a Yellow Nation city!", "log-trade");
+        gameState.playerCities.push({ ...gameState.selectedCity, terrain: getTerrainAt(gameState.selectedCity.q, gameState.selectedCity.r).name, createdAt: Date.now(), isRecognized: true });
+        addLog("Territory purchased peacefully.", "log-trade");
         closeOverlay();
     }
 
     function attemptAttack() {
-        if (gameState.isDeveloping) return addLog("CANNOT ATTACK: Still in Developing Stage.");
+        if (gameState.isDeveloping) return addLog("Military presence required.");
         const terrain = getTerrainAt(gameState.selectedCity.q, gameState.selectedCity.r);
-        
         let pPower = gameState.soldiers + (gameState.vehicles.car * 2) + (gameState.vehicles.plane * 5);
         let rPower = (gameState.rivalSoldiers + (gameState.rivalVehicles.car * 2) + (gameState.rivalVehicles.plane * 5)) * terrain.defenseBonus;
         
-        // Random luck factor
-        pPower *= (0.8 + Math.random() * 0.4);
-
-        if (pPower > rPower) {
-            addLog("Victory! Territory captured.", "log-trade");
+        if (pPower * (0.8 + Math.random() * 0.4) > rPower) {
+            addLog("INVASION SUCCESS! Territory annexed.", "log-trade");
             gameState.rivalCities = gameState.rivalCities.filter(c => c !== gameState.selectedCity);
-            gameState.playerCities.push({ ...gameState.selectedCity, terrain: terrain.name });
-            gameState.soldiers = Math.floor(gameState.soldiers * 0.8);
+            gameState.playerCities.push({ ...gameState.selectedCity, terrain: terrain.name, createdAt: Date.now(), isRecognized: true });
+            gameState.soldiers = Math.floor(gameState.soldiers * 0.7);
+            gameState.rivalMoney = Math.max(0, gameState.rivalMoney - 2000);
+            gameState.rivalSoldiers = Math.floor(gameState.rivalSoldiers * 0.5);
         } else {
-            addLog("Defeat! Your forces were repelled.", "log-warn");
-            gameState.soldiers = Math.floor(gameState.soldiers * 0.4);
+            addLog("INVASION FAILED! Significant losses.", "log-warn");
+            gameState.soldiers = Math.floor(gameState.soldiers * 0.1);
+            gameState.rivalMoney += 1000;
         }
-        updateHUD();
-        closeOverlay();
+        updateHUD(); closeOverlay();
     }
 
     document.getElementById('draggable-city').addEventListener('dragstart', (e) => {
         gameState.isDragging = true;
-        const img = new Image();
-        img.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+        const img = new Image(); img.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
         e.dataTransfer.setDragImage(img, 0, 0);
     });
 
@@ -685,15 +638,12 @@
         if (gameState.isDragging) {
             const hex = pixelToHex(e.clientX, e.clientY);
             const terrain = getTerrainAt(hex.q, hex.r);
-            const isRivalBorder = isInsideRivalBorder(hex.q, hex.r);
             const occupied = gameState.playerCities.some(c=>c.q===hex.q&&c.r===hex.r) || gameState.rivalCities.some(c=>c.q===hex.q&&c.r===hex.r);
             let cost = (gameState.playerCities.length === 0) ? 0 : terrain.cost;
-            if (terrain.buildable && !occupied && !isRivalBorder && gameState.money >= cost) {
+            if (terrain.buildable && !occupied && !isInsideRivalBorder(hex.q, hex.r) && gameState.money >= cost) {
                 gameState.money -= cost;
-                gameState.playerCities.push({ q: hex.q, r: hex.r, terrain: terrain.name });
+                gameState.playerCities.push({ q: hex.q, r: hex.r, terrain: terrain.name, createdAt: Date.now(), isRecognized: false });
                 updateHUD();
-            } else if (isRivalBorder) {
-                addLog("CANNOT BUILD: That hex is inside the Yellow Nation border!", "log-warn");
             }
         }
         gameState.isPanning = false; gameState.isDragging = false;
@@ -705,10 +655,7 @@
         const pCity = gameState.playerCities.find(c => c.q === hex.q && c.r === hex.r);
         if (pCity) return openCityOverlay(pCity, 'player');
         const rCity = gameState.rivalCities.find(c => c.q === hex.q && c.r === hex.r);
-        if (rCity) {
-            if (gameState.playerCities.length === 0) return addLog("INTERACTION LOCKED: Place your first city first.");
-            return openCityOverlay(rCity, 'rival');
-        }
+        if (rCity) return openCityOverlay(rCity, 'rival');
         if (getTerrainAt(hex.q, hex.r).name === 'Mine') {
             document.getElementById('mine-overlay').style.display = 'block'; return;
         }
@@ -722,14 +669,11 @@
             gameState.lastMousePos = { x: e.clientX, y: e.clientY };
         }
         if (gameState.isDragging) {
-            const costInd = document.getElementById('cost-indicator');
-            costInd.style.display = 'block'; costInd.style.left = (e.clientX + 15) + 'px'; costInd.style.top = (e.clientY + 15) + 'px';
+            const ind = document.getElementById('cost-indicator');
+            ind.style.display = 'block'; ind.style.left = (e.clientX + 15) + 'px'; ind.style.top = (e.clientY + 15) + 'px';
             const hex = pixelToHex(e.clientX, e.clientY);
             const terrain = getTerrainAt(hex.q, hex.r);
-            const isRivalBorder = isInsideRivalBorder(hex.q, hex.r);
-            if (!terrain.buildable) costInd.innerText = "BLOCKED (Terrain)";
-            else if (isRivalBorder) costInd.innerText = "BLOCKED (Rival Border)";
-            else costInd.innerText = `Build: $${gameState.playerCities.length === 0 ? 0 : terrain.cost}`;
+            ind.innerText = terrain.buildable ? `Cost: $${gameState.playerCities.length === 0 ? 0 : terrain.cost}` : "Invalid Terrain";
         }
     });
 
@@ -737,51 +681,46 @@
         gameState.selectedCity = city;
         document.getElementById('city-overlay').style.display = 'block';
         document.getElementById('overlay-info').innerText = `Terrain: ${city.terrain}`;
-        if (type === 'player') {
-            document.getElementById('overlay-title').innerText = "Your City";
-            document.getElementById('player-actions').style.display = 'block';
-            document.getElementById('rival-actions').style.display = 'none';
-        } else {
-            document.getElementById('overlay-title').innerText = "Yellow Nation City";
-            document.getElementById('player-actions').style.display = 'none';
-            document.getElementById('rival-actions').style.display = 'block';
-            document.getElementById('btn-attack').disabled = gameState.isDeveloping;
-        }
+        document.getElementById('overlay-title').innerText = type === 'player' ? "Your City" : "Yellow Nation Outpost";
+        document.getElementById('player-actions').style.display = type === 'player' ? 'block' : 'none';
+        document.getElementById('rival-actions').style.display = type === 'rival' ? 'block' : 'none';
         updateHUD();
     }
 
-    function closeOverlay() { document.getElementById('city-overlay').style.display = 'none'; }
+    function closeOverlay() { document.getElementById('city-overlay').style.display = 'none'; gameState.selectedCity = null; }
     function closeMine() { document.getElementById('mine-overlay').style.display = 'none'; }
 
-    function drawHex(center, size, fill, stroke = '#333', strokeWidth = 1) {
+    function drawHex(center, size, fill, stroke = '#333', width = 1) {
+        ctx.save();
         ctx.beginPath();
         for (let i = 0; i < 6; i++) {
-            let angle = (Math.PI / 3) * i;
-            let x = center.x + size * Math.cos(angle);
-            let y = center.y + size * Math.sin(angle);
+            let a = (Math.PI / 3) * i;
+            let x = center.x + size * Math.cos(a), y = center.y + size * Math.sin(a);
             if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
         }
-        ctx.closePath();
+        ctx.closePath(); 
         ctx.fillStyle = fill; ctx.fill(); 
-        ctx.strokeStyle = stroke; ctx.lineWidth = strokeWidth; ctx.stroke();
+        ctx.strokeStyle = stroke; ctx.lineWidth = width; ctx.stroke();
+        ctx.restore();
     }
 
     function render() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-        const padding = 5;
-        const start = pixelToHex(0, 0); const end = pixelToHex(canvas.width, canvas.height);
-        for (let q = start.q - padding; q <= end.q + padding; q++) {
-            for (let r = start.r - padding; r <= end.r + padding; r++) {
+        const start = pixelToHex(0, 0), end = pixelToHex(canvas.width, canvas.height);
+        for (let q = start.q - 5; q <= end.q + 5; q++) {
+            for (let r = start.r - 5; r <= end.r + 5; r++) {
                 const center = hexToPixel(q, r); const terrain = getTerrainAt(q, r);
                 const isRivalBorder = isInsideRivalBorder(q, r);
                 const isPlayerBorder = isInsidePlayerBorder(q, r);
-                const isRivalCity = gameState.rivalCities.some(c => c.q === q && c.r === r);
-                const isPlayerCity = gameState.playerCities.some(c => c.q === q && c.r === r);
+                const pCity = gameState.playerCities.find(c => c.q === q && c.r === r);
+                const rCity = gameState.rivalCities.find(c => c.q === q && c.r === r);
+                
                 drawHex(center, gameState.hexSize, terrain.color);
-                if (isRivalBorder && !isRivalCity) drawHex(center, gameState.hexSize, 'rgba(255, 255, 0, 0.15)', 'rgba(255, 255, 0, 0.6)', 2);
-                if (isPlayerBorder && !isPlayerCity) drawHex(center, gameState.hexSize, 'rgba(255, 68, 68, 0.15)', 'rgba(255, 68, 68, 0.6)', 2);
-                if (isPlayerCity) drawHex(center, gameState.hexSize * 0.7, '#ff4444', '#fff');
-                if (isRivalCity) drawHex(center, gameState.hexSize * 0.7, '#ffff00', '#000');
+                if (isRivalBorder && !rCity) drawHex(center, gameState.hexSize, 'rgba(241, 196, 15, 0.2)', 'rgba(241, 196, 15, 0.7)', 2);
+                if (isPlayerBorder && !pCity) drawHex(center, gameState.hexSize, 'rgba(231, 76, 60, 0.1)', 'rgba(231, 76, 60, 0.5)', 2);
+
+                if (rCity) drawHex(center, gameState.hexSize * 0.7, '#f1c40f', '#000', 3);
+                if (pCity) drawHex(center, gameState.hexSize * 0.7, '#e74c3c', '#fff', 2);
             }
         }
         requestAnimationFrame(render);

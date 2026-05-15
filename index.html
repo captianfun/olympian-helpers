@@ -1,118 +1,792 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <meta charset="utf-8">
+    <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>⚡ Olympian Helpers</title>
+    <title>Nations: The Video Game</title>
     <style>
         body {
-            font-family: "Comic Sans MS", "Comic Sans", cursive;
-            background-image: url('https://upload.wikimedia.org/wikipedia/commons/a/a4/Parthenon_%2830276156187%29.jpg');
-            background-size: cover;
-            background-attachment: fixed;
-            background-position: center;
-            color: white;
             margin: 0;
-            padding: 20px;
+            overflow: hidden;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #222;
+            color: white;
+            user-select: none;
         }
 
-        /* Semi-transparent overlay to make text pop for your classmates */
-        .content-container {
-            background-color: rgba(0, 0, 0, 0.6);
-            padding: 30px;
-            border-radius: 15px;
-            max-width: 800px;
-            margin: 0 auto;
+        #game-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
         }
 
-        .important {
+        canvas {
+            display: block;
+        }
+
+        /* Top HUD */
+        #hud {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 80px;
+            background: rgba(0, 0, 0, 0.9);
+            display: flex;
+            align-items: center;
+            padding: 0 20px;
+            gap: 20px;
+            border-bottom: 2px solid #444;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        .stat-item {
+            display: flex;
+            flex-direction: column;
+            min-width: 90px;
+        }
+
+        .stat-label {
+            font-size: 10px;
+            text-transform: uppercase;
+            color: #aaa;
+            letter-spacing: 1px;
+        }
+
+        .stat-value {
+            font-size: 15px;
             font-weight: bold;
-            color: #ffd700; /* Gold color for Greek theme */
+            color: #0f0;
         }
 
-        .popup {
-            text-decoration: underline;
-            cursor: help;
-        }
-
-        h1 {
+        /* Sidebar */
+        #sidebar {
+            position: absolute;
+            left: 10px;
+            top: 100px;
+            width: 120px;
+            background: rgba(0, 0, 0, 0.8);
+            border-radius: 8px;
+            padding: 15px;
+            border: 1px solid #555;
             text-align: center;
-            font-size: 3em;
-            text-shadow: 2px 2px 4px #000;
+            z-index: 5;
         }
 
-        h2 {
-            border-bottom: 2px solid #ffd700;
-            display: inline-block;
+        .sidebar-title {
+            font-size: 12px;
+            margin-bottom: 15px;
+            color: #ddd;
         }
-        
-        #submit-btn {
-            color:white;
-            background-color:blue;
-            border:2px solid blue;
-            border-radius:8px;
+
+        #draggable-city {
+            width: 50px;
+            height: 50px;
+            background-color: #ff4444;
+            margin: 0 auto;
+            clip-path: polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%);
+            cursor: grab;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            font-weight: bold;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.5);
+        }
+
+        /* Overlays */
+        .overlay {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 350px;
+            background: #333;
+            border: 3px solid #777;
+            border-radius: 12px;
+            padding: 20px;
+            display: none;
+            z-index: 200;
+            box-shadow: 0 0 20px rgba(0,0,0,0.8);
+        }
+
+        .btn {
+            background: #444;
+            color: white;
+            border: 1px solid #666;
+            padding: 8px;
+            margin: 4px 0;
+            width: 100%;
+            border-radius: 4px;
             cursor: pointer;
+            font-size: 13px;
+            font-weight: bold;
+        }
+
+        .btn:hover:not(:disabled) { background: #555; }
+        .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+        .close-btn { background: #aa4444; margin-top: 10px; }
+        .trade-btn { background: #4a90e2; }
+        .attack-btn { background: #e67e22; }
+
+        #cost-indicator {
+            position: absolute;
+            pointer-events: none;
+            background: white;
+            color: black;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+            display: none;
+            z-index: 100;
+        }
+
+        #log {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            width: 320px;
+            height: 150px;
+            background: rgba(0,0,0,0.85);
+            font-size: 12px;
+            padding: 10px;
+            border-radius: 5px;
+            overflow-y: auto;
+            pointer-events: none;
+            color: #eee;
+            border: 1px solid #444;
+            transition: background 0.3s;
+        }
+
+        .log-entry { margin-bottom: 4px; border-left: 3px solid #666; padding-left: 5px; }
+        .log-warn { border-left-color: #ff4444; color: #ffbbbb; font-weight: bold; }
+        .log-trade { border-left-color: #4a90e2; color: #bbddff; font-weight: bold; }
+
+        .vehicle-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 5px;
+            margin-top: 10px;
+        }
+
+        /* Mini-modal for rejections */
+        #rejection-notice {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #ff4444;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 20px;
+            font-weight: bold;
+            display: none;
+            z-index: 300;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.5);
         }
     </style>
 </head>
 <body>
 
-<div class="content-container">
-    <h1>Olympian Helpers</h1>
+<div id="game-container">
+    <canvas id="gameCanvas"></canvas>
+    <div id="rejection-notice">Offer Rejected!</div>
 
-    <h2>Main Idea</h2>
-    <p><strong>Olympian Helpers</strong> is a book series written by Oz Lavenski. In the story, the two main characters, Nicholas Brown and his half-brother, Francis Gorsky, do work for the <span id="popup1" class="important popup">Olympian</span> gods. This includes anything from finding a treasure to stopping a war.</p>
+    <div id="hud">
+        <div class="stat-item">
+            <span class="stat-label">Money</span>
+            <span id="money-display" class="stat-value">$10,000</span>
+        </div>
+        <div class="stat-item">
+            <span class="stat-label">Stage</span>
+            <span id="stage-display" class="stat-value" style="color: #4a90e2;">Developing</span>
+        </div>
+        <div class="stat-item">
+            <span class="stat-label">Zandite</span>
+            <span id="zandite-display" class="stat-value" style="color: #00ffff;">0</span>
+        </div>
+        <div class="stat-item">
+            <span id="resource-bonus-label" class="stat-label">Build Bonus</span>
+            <span id="iron-display" class="stat-value" style="color: #bdc3c7;">0%</span>
+        </div>
+        <div class="stat-item">
+            <span class="stat-label">Military</span>
+            <span id="military-display" class="stat-value">S:0 | V:0</span>
+        </div>
+    </div>
 
-    <h2>Characters</h2>
-    <p><strong>Nick Brown and Francis Gorsky</strong> are the main characters (or MCs) in the story. They are the two <span class="important popup" id="popup2">protagonists</span> in the story. Nick is the younger kid, but he's smarter, quicker on his feet, and also the main main character. The story is written in his <span class="important popup" id="popup3">POV</span>.</p>
+    <div id="sidebar">
+        <div class="sidebar-title">CREATE A CITY</div>
+        <div id="draggable-city" draggable="true">DRAG</div>
+    </div>
 
-    <h2>Books</h2>
-<p><strong>There are 2 books</strong> in the series right now. A third one is in the making. Each one follows a similar <span class="important popup" id="popup4">plot</span>.</p>
-<ol>
-    <li class="important">Clash of the Gods</li>
-    <li class="important">Missing Messenger</li>
-    <li class="important">Immortal Doors</li>
-</ol>
-    
-    <h2>Author</h2>
-    <p><strong>Oz Lavenski</strong>, as you can guess, loves Greek mythology. He's read every book he could get his hands on (for kids, of course). He was inspired the most by <span class="important">George O'Connor</span>. That's where he got the myth about <span class="important">Hermes and the dogs</span> and <span class="important">Apollo and Asclepius</span>.</p>
+    <div id="cost-indicator">Cost: $0</div>
+
+    <!-- City Management -->
+    <div id="city-overlay" class="overlay">
+        <h2 id="overlay-title">City Management</h2>
+        <p id="overlay-info"></p>
+        
+        <div id="player-actions">
+            <button id="btn-train-soldier" class="btn" onclick="buyUnit('soldier')">Train Soldier ($500 + 5 Zandite)</button>
+            <div class="vehicle-grid">
+                <button id="buy-car" class="btn" onclick="buyUnit('car')">Build Car</button>
+                <button id="buy-boat" class="btn" onclick="buyUnit('boat')">Build Boat</button>
+                <button id="buy-plane" class="btn" onclick="buyUnit('plane')">Build Plane</button>
+            </div>
+        </div>
+
+        <div id="rival-actions" style="display:none;">
+            <button id="btn-trade" class="btn trade-btn" onclick="attemptTrade()">Trade for City ($5,000)</button>
+            <button id="btn-attack" class="btn attack-btn" onclick="attemptAttack()">Attack City</button>
+        </div>
+        <button class="btn close-btn" onclick="closeOverlay()">Close</button>
+    </div>
+
+    <!-- Rival Interaction -->
+    <div id="rival-ask-overlay" class="overlay">
+        <h2 id="ask-title">Yellow Nation Envoy</h2>
+        <p id="ask-text"></p>
+        <button id="btn-accept" class="btn trade-btn">Accept Offer</button>
+        <button id="btn-decline" class="btn close-btn">Decline</button>
+    </div>
+
+    <!-- Mine Management -->
+    <div id="mine-overlay" class="overlay">
+        <h2>Deep Mine</h2>
+        <p>Mining is <b>FREE</b>!</p>
+        <button id="mine-btn-primary" class="btn" onclick="mineOre()" style="background: #27ae60;">Mine for Ores (FREE)</button>
+        <button class="btn close-btn" onclick="closeMine()">Close</button>
+    </div>
+
+    <div id="log"></div>
 </div>
 
 <script>
-    // Variables for your elements
-    const popEl1 = document.getElementById("popup1");
-    const popEl2 = document.getElementById("popup2");
-    const popEl3 = document.getElementById("popup3");
-    const popEl4 = document.getElementById("popup4");
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const moneyDisplay = document.getElementById('money-display');
+    const zanditeDisplay = document.getElementById('zandite-display');
+    const ironDisplay = document.getElementById('iron-display');
+    const stageDisplay = document.getElementById('stage-display');
+    const log = document.getElementById('log');
 
-    // The function that changes the text
-    const mouseOver = function(elId, txt1, txt2) {
-        const element = document.getElementById(elId);
-        element.textContent = txt1;
-        
-        // Change it back after 5 seconds
-        window.setTimeout(function() {
-            element.textContent = txt2;
-        }, 5000);
+    let gameState = {
+        money: 10000,
+        zandite: 0,
+        buildingResourceCount: 0,
+        soldiers: 0,
+        vehicles: { car: 0, boat: 0, plane: 0 },
+        isDeveloping: true,
+        playerCities: [],
+        rivalCities: [],
+        rivalMoney: 10000,
+        rivalZandite: 15, // Started with a bit more to ensure early military
+        rivalSoldiers: 0,
+        rivalVehicles: { car: 0, boat: 0, plane: 0 },
+        camera: { x: window.innerWidth / 2, y: window.innerHeight / 2 },
+        hexSize: 40,
+        isDragging: false,
+        isPanning: false,
+        lastMousePos: { x: 0, y: 0 },
+        selectedCity: null,
+        mineCooldown: false,
+        borderConflictLastNotified: 0
     };
 
-    // Event listeners for the hovers
-    popEl1.addEventListener("mousemove", function() {
-        mouseOver("popup1", "Greek", "Olympian");
-    });
-    
-    popEl2.addEventListener("mousemove", function() {
-        mouseOver("popup2", "good guys", "protagonists");
-    });
-    
-    popEl3.addEventListener("mousemove", function() {
-        mouseOver("popup3", "Point Of View", "POV");
-    });
-    
-    popEl4.addEventListener("mousemove", function() {
-        mouseOver("popup4", "story structure", "plot");
-    });
-</script>
+    const BASE_COSTS = { car: 800, boat: 1200, plane: 2500 };
+    const HEX_NEIGHBORS = [
+        {q:1, r:0}, {q:1, r:-1}, {q:0, r:-1},
+        {q:-1, r:0}, {q:-1, r:1}, {q:0, r:1}
+    ];
 
+    const TERRAIN = {
+        MOUNTAIN: { color: '#D8BFD8', name: 'Mountain', cost: 3000, buildable: true, defenseBonus: 2.0 },
+        VALLEY: { color: '#90EE90', name: 'Valley', cost: 2000, buildable: true, defenseBonus: 1.0 },
+        MINE: { color: '#8B4513', name: 'Mine', cost: 0, buildable: false },
+        WATER: { color: '#00008B', name: 'Water', cost: 0, buildable: false }
+    };
+
+    function init() {
+        addLog("DEVELOPING STAGE: Drag the red hex to create your free first city.");
+        
+        let q = 3, r = 2;
+        while (!getTerrainAt(q, r).buildable) {
+            q++;
+        }
+        gameState.rivalCities.push({ q, r, terrain: getTerrainAt(q,r).name });
+
+        resize();
+        window.addEventListener('resize', resize);
+        updateHUD();
+        render();
+        gameLoop();
+    }
+
+    function resize() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+    }
+
+    function showNotice(msg) {
+        const notice = document.getElementById('rejection-notice');
+        notice.innerText = msg;
+        notice.style.display = 'block';
+        setTimeout(() => notice.style.display = 'none', 3000);
+    }
+
+    function addLog(msg, type = '') {
+        const div = document.createElement('div');
+        div.className = `log-entry ${type}`;
+        div.innerHTML = `> ${msg}`;
+        log.appendChild(div);
+        log.scrollTop = log.scrollHeight;
+    }
+
+    function getTerrainAt(q, r) {
+        const val = (Math.abs(Math.sin(q * 12.9 + r * 78.2) * 43758.5) % 1);
+        if (val < 0.15) return TERRAIN.MOUNTAIN;
+        if (val < 0.25) return TERRAIN.MINE;
+        if (val < 0.40) return TERRAIN.WATER;
+        return TERRAIN.VALLEY;
+    }
+
+    function isInsideRivalBorder(q, r) {
+        return gameState.rivalCities.some(city => {
+            if (city.q === q && city.r === r) return true;
+            return HEX_NEIGHBORS.some(n => city.q + n.q === q && city.r + n.r === r);
+        });
+    }
+
+    function isInsidePlayerBorder(q, r) {
+        return gameState.playerCities.some(city => {
+            if (city.q === q && city.r === r) return true;
+            return HEX_NEIGHBORS.some(n => city.q + n.q === q && city.r + n.r === r);
+        });
+    }
+
+    function checkBorderConflict() {
+        let conflictFound = false;
+        for (const pCity of gameState.playerCities) {
+            if (isInsideRivalBorder(pCity.q, pCity.r)) conflictFound = true;
+            for (const n of HEX_NEIGHBORS) {
+                if (isInsideRivalBorder(pCity.q + n.q, pCity.r + n.r)) conflictFound = true;
+            }
+        }
+        const now = Date.now();
+        if (conflictFound && now - gameState.borderConflictLastNotified > 15000) {
+            addLog("TERRITORY ALERT: The Yellow Nation border is overlapping yours! They seem angry.", "log-warn");
+            gameState.borderConflictLastNotified = now;
+        }
+        return conflictFound;
+    }
+
+    function hexToPixel(q, r) {
+        const x = gameState.hexSize * (3/2 * q);
+        const y = gameState.hexSize * (Math.sqrt(3)/2 * q + Math.sqrt(3) * r);
+        return { x: x + gameState.camera.x, y: y + gameState.camera.y };
+    }
+
+    function pixelToHex(x, y) {
+        const px = x - gameState.camera.x;
+        const py = y - gameState.camera.y;
+        const q = Math.round((2/3 * px) / gameState.hexSize);
+        const r = Math.round((-1/3 * px + Math.sqrt(3)/3 * py) / gameState.hexSize);
+        return { q, r };
+    }
+
+    function gameLoop() {
+        rivalAI();
+        gameState.money += gameState.playerCities.length * 1.5;
+        gameState.rivalMoney += gameState.rivalCities.length * 2.0; // AI grows slightly faster to be a threat
+        
+        if (gameState.playerCities.length > 0 && Math.random() < 0.02) gameState.zandite++;
+        if (gameState.rivalCities.length > 0 && Math.random() < 0.03) gameState.rivalZandite++; // More Zandite for Rival
+        
+        updateHUD();
+        setTimeout(gameLoop, 100);
+    }
+
+    function rivalAI() {
+        if (gameState.rivalCities.length === 0) {
+            let found = false;
+            let attempts = 0;
+            let q = 5, r = 5; 
+            if (gameState.playerCities.length > 0) {
+                const pBase = gameState.playerCities[0];
+                while (!found && attempts < 20) {
+                    const offsetQ = Math.floor(Math.random() * 10) - 5;
+                    const offsetR = Math.floor(Math.random() * 10) - 5;
+                    const tQ = pBase.q + offsetQ;
+                    const tR = pBase.r + offsetR;
+                    const terrain = getTerrainAt(tQ, tR);
+                    const occupied = gameState.playerCities.some(c=>c.q===tQ && c.r===tR);
+                    if (terrain.buildable && !occupied && !isInsidePlayerBorder(tQ, tR)) {
+                        q = tQ; r = tR; found = true;
+                    }
+                    attempts++;
+                }
+            }
+            gameState.rivalCities.push({ q, r, terrain: getTerrainAt(q, r).name });
+            gameState.rivalMoney = Math.max(gameState.rivalMoney, 5000);
+            gameState.rivalZandite = Math.max(gameState.rivalZandite, 10);
+            addLog("RE-EMERGENCE: The Yellow Nation has settled a new territory nearby!", "log-warn");
+        }
+
+        const hasConflict = checkBorderConflict();
+
+        // 1. Expansion
+        if (gameState.rivalMoney > 4000 && Math.random() < 0.01) { 
+            const city = gameState.rivalCities[Math.floor(Math.random() * gameState.rivalCities.length)];
+            const offset = HEX_NEIGHBORS[Math.floor(Math.random()*6)];
+            const nQ = city.q + offset.q, nR = city.r + offset.r;
+            const terrain = getTerrainAt(nQ, nR);
+            const occupied = gameState.playerCities.some(c=>c.q===nQ&&c.r===nR) || gameState.rivalCities.some(c=>c.q===nQ&&c.r===nR);
+            const isPlayerTerritory = isInsidePlayerBorder(nQ, nR);
+            if (terrain.buildable && !occupied && !isPlayerTerritory && gameState.rivalMoney >= terrain.cost) {
+                gameState.rivalMoney -= terrain.cost;
+                gameState.rivalCities.push({ q: nQ, r: nR, terrain: terrain.name });
+            }
+        }
+        
+        // 2. Military Build-up (Aggressive)
+        if (gameState.rivalMoney > 1000 && Math.random() < 0.05) {
+            if (gameState.rivalZandite >= 5) {
+                gameState.rivalMoney -= 500; gameState.rivalZandite -= 5; gameState.rivalSoldiers++;
+            } else if (gameState.rivalMoney > 3000) {
+                // Buy plane if rich
+                gameState.rivalMoney -= 2500; gameState.rivalVehicles.plane++;
+            } else {
+                gameState.rivalMoney -= 800; gameState.rivalVehicles.car++;
+            }
+        }
+
+        // 3. Interactions
+        if (gameState.playerCities.length > 0) {
+            // Trade offer
+            if (!gameState.isDeveloping && gameState.rivalMoney > 9000 && Math.random() < 0.003) {
+                rivalInitiateTrade();
+            }
+
+            // ATTACK LOGIC (Much higher chance now)
+            let attackChance = 0.01; // 1% per tick normally
+            if (hasConflict) attackChance = 0.08; // 8% per tick if borders touch!
+
+            if (!gameState.isDeveloping && (gameState.rivalSoldiers + gameState.rivalVehicles.car + gameState.rivalVehicles.plane) > 2) {
+                if (Math.random() < attackChance) {
+                    const myPower = gameState.soldiers + (gameState.vehicles.car * 2) + (gameState.vehicles.plane * 5);
+                    const theirPower = gameState.rivalSoldiers + (gameState.rivalVehicles.car * 2) + (gameState.rivalVehicles.plane * 5);
+                    
+                    // Attack if they feel stronger OR if they are just aggressive (has conflict)
+                    if (theirPower >= myPower * 0.8 || (hasConflict && Math.random() < 0.5)) {
+                        rivalInitiateAttack(hasConflict);
+                    }
+                }
+            }
+        }
+    }
+
+    function rivalInitiateAttack(isBorderWar = false) {
+        if (gameState.playerCities.length === 0 || gameState.isDeveloping) return;
+        
+        const target = gameState.playerCities[Math.floor(Math.random() * gameState.playerCities.length)];
+        const msg = isBorderWar ? "BORDER WAR! Yellow Nation forces are storming your border!" : "The Yellow Nation has launched a full-scale assault!";
+        addLog(msg, "log-warn");
+        
+        const terrain = getTerrainAt(target.q, target.r);
+        
+        // Strength calculation
+        let pPower = (gameState.soldiers + (gameState.vehicles.car * 2) + (gameState.vehicles.plane * 5)) * terrain.defenseBonus;
+        let rPower = (gameState.rivalSoldiers + (gameState.rivalVehicles.car * 2) + (gameState.rivalVehicles.plane * 5));
+        
+        // Random variance (make them "mess up")
+        rPower *= (0.7 + Math.random() * 0.6); 
+
+        if (rPower > pPower) {
+            addLog(`CRITICAL: They captured your city at (${target.q}, ${target.r})!`, "log-warn");
+            gameState.playerCities = gameState.playerCities.filter(c => c !== target);
+            gameState.rivalCities.push({ ...target, terrain: terrain.name });
+            
+            // Winners keep some soldiers
+            gameState.rivalSoldiers = Math.floor(gameState.rivalSoldiers * 0.7);
+            gameState.soldiers = Math.floor(gameState.soldiers * 0.3);
+        } else {
+            addLog("DEFENSE SUCCESS: Your garrison repelled the Yellow Nation attack.", "log-trade");
+            // Losers lose more soldiers
+            gameState.rivalSoldiers = Math.floor(gameState.rivalSoldiers * 0.2);
+            gameState.soldiers = Math.floor(gameState.soldiers * 0.8);
+        }
+        updateHUD();
+    }
+
+    function rivalInitiateTrade() {
+        if (document.getElementById('rival-ask-overlay').style.display === 'block') return;
+        const cityToBuy = gameState.playerCities[Math.floor(Math.random() * gameState.playerCities.length)];
+        if (!cityToBuy) return;
+        const askOverlay = document.getElementById('rival-ask-overlay');
+        askOverlay.style.display = 'block';
+        document.getElementById('ask-text').innerText = `Yellow Nation merchants offer $6,000 for your settlement at (${cityToBuy.q}, ${cityToBuy.r}).`;
+        document.getElementById('btn-accept').onclick = () => {
+            gameState.money += 6000;
+            gameState.playerCities = gameState.playerCities.filter(c => c !== cityToBuy);
+            gameState.rivalCities.push({ ...cityToBuy, terrain: getTerrainAt(cityToBuy.q, cityToBuy.r).name });
+            addLog("City sold for $6,000.", 'log-trade');
+            askOverlay.style.display = 'none';
+        };
+        document.getElementById('btn-decline').onclick = () => { askOverlay.style.display = 'none'; };
+    }
+
+    function getVehicleCost(type) {
+        const discount = Math.min(0.5, gameState.buildingResourceCount * 0.05);
+        return Math.floor(BASE_COSTS[type] * (1 - discount));
+    }
+
+    function buyUnit(type) {
+        if (type === 'soldier') {
+            if (gameState.money >= 500 && gameState.zandite >= 5) {
+                gameState.money -= 500; gameState.zandite -= 5; gameState.soldiers++;
+                if (gameState.isDeveloping) {
+                    gameState.isDeveloping = false;
+                    addLog("DEVELOPING STAGE ENDED. You are now vulnerable to attacks!", "log-warn");
+                }
+            } else return addLog("Not enough money/Zandite.");
+        } else {
+            if (gameState.isDeveloping) return addLog("CANNOT BUILD VEHICLES: Still in Developing Stage.");
+            const cost = getVehicleCost(type);
+            if (gameState.money >= cost) {
+                gameState.money -= cost; gameState.vehicles[type]++;
+            } else return addLog("Insufficient funds.");
+        }
+        updateHUD();
+        closeOverlay();
+    }
+
+    function updateHUD() {
+        moneyDisplay.innerText = `$${Math.floor(gameState.money).toLocaleString()}`;
+        zanditeDisplay.innerText = gameState.zandite;
+        const discountPercent = Math.min(50, gameState.buildingResourceCount * 5);
+        ironDisplay.innerText = `${discountPercent}%`;
+        const totalV = gameState.vehicles.car + gameState.vehicles.boat + gameState.vehicles.plane;
+        document.getElementById('military-display').innerText = `S:${gameState.soldiers} | V:${totalV}`;
+        if (gameState.money < 1000) {
+            stageDisplay.innerText = "Broke";
+            stageDisplay.style.color = "#ff4444";
+        } else if (gameState.isDeveloping) {
+            stageDisplay.innerText = "Developing";
+            stageDisplay.style.color = "#4a90e2";
+        } else {
+            stageDisplay.innerText = "Active";
+            stageDisplay.style.color = "#0f0";
+        }
+        if (document.getElementById('city-overlay').style.display === 'block') {
+            const isDev = gameState.isDeveloping;
+            document.getElementById('buy-car').innerHTML = `Build Car<br>${isDev ? 'Locked' : '$'+getVehicleCost('car')}`;
+            document.getElementById('buy-boat').innerHTML = `Build Boat<br>${isDev ? 'Locked' : '$'+getVehicleCost('boat')}`;
+            document.getElementById('buy-plane').innerHTML = `Build Plane<br>${isDev ? 'Locked' : '$'+getVehicleCost('plane')}`;
+        }
+    }
+
+    function mineOre() {
+        if (gameState.mineCooldown) return;
+        gameState.mineCooldown = true;
+        const btn = document.getElementById('mine-btn-primary');
+        btn.disabled = true;
+        let secondsLeft = 2;
+        const timer = setInterval(() => {
+            secondsLeft--;
+            if (secondsLeft > 0) btn.innerText = `Recharging (${secondsLeft}s)...`;
+            else {
+                clearInterval(timer);
+                gameState.mineCooldown = false;
+                btn.disabled = false;
+                btn.innerText = "Mine for Ores (FREE)";
+            }
+        }, 1000);
+        const r = Math.random();
+        if (r < 0.1) { gameState.zandite += 2; addLog("Found Zandite!"); } 
+        else if (r < 0.25) { gameState.money += 2000; addLog("GOLD! +$2,000", "log-trade"); } 
+        else if (r < 0.5) { 
+            const isCopper = Math.random() < 0.5;
+            const oreName = isCopper ? "Copper" : "Iron";
+            if (gameState.isDeveloping) { gameState.money += 100; addLog(`Found ${oreName}! Developing Stage Bonus: +$100`, "log-trade"); } 
+            else { gameState.buildingResourceCount++; addLog(`${oreName} found! Vehicle costs down.`); }
+        } else { gameState.money += 200; addLog("Found basic minerals."); }
+        updateHUD();
+    }
+
+    function attemptTrade() {
+        if (gameState.money < 1000) return addLog("BROKE STAGE: Cannot trade.");
+        if (gameState.money < 5000) return addLog("Insufficient funds for trade.");
+
+        const rivalCitiesCount = gameState.rivalCities.length;
+        const playerCitiesCount = gameState.playerCities.length;
+        
+        if (rivalCitiesCount <= 1) {
+            showNotice("Rival: 'This is our only home! We won't sell!'");
+            addLog("The Yellow Nation refused to sell their only territory.", "log-warn");
+            return;
+        }
+
+        let baseRefusalChance = 0.3; 
+        if (rivalCitiesCount > playerCitiesCount) baseRefusalChance = 0.7; 
+
+        if (Math.random() < baseRefusalChance) {
+            const excuses = [
+                "We need more money than that!",
+                "Our people refuse to leave.",
+                "This land is sacred to us.",
+                "Not today, merchant!"
+            ];
+            showNotice("Rival: '" + excuses[Math.floor(Math.random()*excuses.length)] + "'");
+            addLog("Trade negotiation failed.", "log-warn");
+            return;
+        }
+
+        gameState.money -= 5000;
+        gameState.rivalCities = gameState.rivalCities.filter(c => c !== gameState.selectedCity);
+        gameState.playerCities.push({ ...gameState.selectedCity, terrain: getTerrainAt(gameState.selectedCity.q, gameState.selectedCity.r).name });
+        addLog("You purchased a Yellow Nation city!", "log-trade");
+        closeOverlay();
+    }
+
+    function attemptAttack() {
+        if (gameState.isDeveloping) return addLog("CANNOT ATTACK: Still in Developing Stage.");
+        const terrain = getTerrainAt(gameState.selectedCity.q, gameState.selectedCity.r);
+        
+        let pPower = gameState.soldiers + (gameState.vehicles.car * 2) + (gameState.vehicles.plane * 5);
+        let rPower = (gameState.rivalSoldiers + (gameState.rivalVehicles.car * 2) + (gameState.rivalVehicles.plane * 5)) * terrain.defenseBonus;
+        
+        // Random luck factor
+        pPower *= (0.8 + Math.random() * 0.4);
+
+        if (pPower > rPower) {
+            addLog("Victory! Territory captured.", "log-trade");
+            gameState.rivalCities = gameState.rivalCities.filter(c => c !== gameState.selectedCity);
+            gameState.playerCities.push({ ...gameState.selectedCity, terrain: terrain.name });
+            gameState.soldiers = Math.floor(gameState.soldiers * 0.8);
+        } else {
+            addLog("Defeat! Your forces were repelled.", "log-warn");
+            gameState.soldiers = Math.floor(gameState.soldiers * 0.4);
+        }
+        updateHUD();
+        closeOverlay();
+    }
+
+    document.getElementById('draggable-city').addEventListener('dragstart', (e) => {
+        gameState.isDragging = true;
+        const img = new Image();
+        img.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+        e.dataTransfer.setDragImage(img, 0, 0);
+    });
+
+    window.addEventListener('mouseup', (e) => {
+        if (gameState.isDragging) {
+            const hex = pixelToHex(e.clientX, e.clientY);
+            const terrain = getTerrainAt(hex.q, hex.r);
+            const isRivalBorder = isInsideRivalBorder(hex.q, hex.r);
+            const occupied = gameState.playerCities.some(c=>c.q===hex.q&&c.r===hex.r) || gameState.rivalCities.some(c=>c.q===hex.q&&c.r===hex.r);
+            let cost = (gameState.playerCities.length === 0) ? 0 : terrain.cost;
+            if (terrain.buildable && !occupied && !isRivalBorder && gameState.money >= cost) {
+                gameState.money -= cost;
+                gameState.playerCities.push({ q: hex.q, r: hex.r, terrain: terrain.name });
+                updateHUD();
+            } else if (isRivalBorder) {
+                addLog("CANNOT BUILD: That hex is inside the Yellow Nation border!", "log-warn");
+            }
+        }
+        gameState.isPanning = false; gameState.isDragging = false;
+        document.getElementById('cost-indicator').style.display = 'none';
+    });
+
+    canvas.addEventListener('mousedown', (e) => {
+        const hex = pixelToHex(e.clientX, e.clientY);
+        const pCity = gameState.playerCities.find(c => c.q === hex.q && c.r === hex.r);
+        if (pCity) return openCityOverlay(pCity, 'player');
+        const rCity = gameState.rivalCities.find(c => c.q === hex.q && c.r === hex.r);
+        if (rCity) {
+            if (gameState.playerCities.length === 0) return addLog("INTERACTION LOCKED: Place your first city first.");
+            return openCityOverlay(rCity, 'rival');
+        }
+        if (getTerrainAt(hex.q, hex.r).name === 'Mine') {
+            document.getElementById('mine-overlay').style.display = 'block'; return;
+        }
+        gameState.isPanning = true; gameState.lastMousePos = { x: e.clientX, y: e.clientY };
+    });
+
+    window.addEventListener('mousemove', (e) => {
+        if (gameState.isPanning) {
+            gameState.camera.x += e.clientX - gameState.lastMousePos.x;
+            gameState.camera.y += e.clientY - gameState.lastMousePos.y;
+            gameState.lastMousePos = { x: e.clientX, y: e.clientY };
+        }
+        if (gameState.isDragging) {
+            const costInd = document.getElementById('cost-indicator');
+            costInd.style.display = 'block'; costInd.style.left = (e.clientX + 15) + 'px'; costInd.style.top = (e.clientY + 15) + 'px';
+            const hex = pixelToHex(e.clientX, e.clientY);
+            const terrain = getTerrainAt(hex.q, hex.r);
+            const isRivalBorder = isInsideRivalBorder(hex.q, hex.r);
+            if (!terrain.buildable) costInd.innerText = "BLOCKED (Terrain)";
+            else if (isRivalBorder) costInd.innerText = "BLOCKED (Rival Border)";
+            else costInd.innerText = `Build: $${gameState.playerCities.length === 0 ? 0 : terrain.cost}`;
+        }
+    });
+
+    function openCityOverlay(city, type) {
+        gameState.selectedCity = city;
+        document.getElementById('city-overlay').style.display = 'block';
+        document.getElementById('overlay-info').innerText = `Terrain: ${city.terrain}`;
+        if (type === 'player') {
+            document.getElementById('overlay-title').innerText = "Your City";
+            document.getElementById('player-actions').style.display = 'block';
+            document.getElementById('rival-actions').style.display = 'none';
+        } else {
+            document.getElementById('overlay-title').innerText = "Yellow Nation City";
+            document.getElementById('player-actions').style.display = 'none';
+            document.getElementById('rival-actions').style.display = 'block';
+            document.getElementById('btn-attack').disabled = gameState.isDeveloping;
+        }
+        updateHUD();
+    }
+
+    function closeOverlay() { document.getElementById('city-overlay').style.display = 'none'; }
+    function closeMine() { document.getElementById('mine-overlay').style.display = 'none'; }
+
+    function drawHex(center, size, fill, stroke = '#333', strokeWidth = 1) {
+        ctx.beginPath();
+        for (let i = 0; i < 6; i++) {
+            let angle = (Math.PI / 3) * i;
+            let x = center.x + size * Math.cos(angle);
+            let y = center.y + size * Math.sin(angle);
+            if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
+        ctx.closePath();
+        ctx.fillStyle = fill; ctx.fill(); 
+        ctx.strokeStyle = stroke; ctx.lineWidth = strokeWidth; ctx.stroke();
+    }
+
+    function render() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        const padding = 5;
+        const start = pixelToHex(0, 0); const end = pixelToHex(canvas.width, canvas.height);
+        for (let q = start.q - padding; q <= end.q + padding; q++) {
+            for (let r = start.r - padding; r <= end.r + padding; r++) {
+                const center = hexToPixel(q, r); const terrain = getTerrainAt(q, r);
+                const isRivalBorder = isInsideRivalBorder(q, r);
+                const isPlayerBorder = isInsidePlayerBorder(q, r);
+                const isRivalCity = gameState.rivalCities.some(c => c.q === q && c.r === r);
+                const isPlayerCity = gameState.playerCities.some(c => c.q === q && c.r === r);
+                drawHex(center, gameState.hexSize, terrain.color);
+                if (isRivalBorder && !isRivalCity) drawHex(center, gameState.hexSize, 'rgba(255, 255, 0, 0.15)', 'rgba(255, 255, 0, 0.6)', 2);
+                if (isPlayerBorder && !isPlayerCity) drawHex(center, gameState.hexSize, 'rgba(255, 68, 68, 0.15)', 'rgba(255, 68, 68, 0.6)', 2);
+                if (isPlayerCity) drawHex(center, gameState.hexSize * 0.7, '#ff4444', '#fff');
+                if (isRivalCity) drawHex(center, gameState.hexSize * 0.7, '#ffff00', '#000');
+            }
+        }
+        requestAnimationFrame(render);
+    }
+    init();
+</script>
 </body>
 </html>
